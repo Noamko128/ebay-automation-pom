@@ -35,6 +35,7 @@ scenarios, and writes reports/screenshots/traces (paths below). No `.env` file i
 | Allure raw results | `reports/allure-results/` | View interactively with `allure serve reports/allure-results` if you have the [Allure commandline](https://allurereport.org/docs/install/) + a JDK installed. |
 | Screenshots | `screenshots/` | One per item added to cart, plus one per cart-total assertion. |
 | Playwright traces | `reports/traces/` | One `.zip` per test; open with `playwright show-trace <file>`. |
+| Live ebay.com proof | `reports/live_ebay_proof.txt` | Captured output of `scripts/live_ebay_search_smoke.py` against real ebay.com (not the mock) — see "Why a local mock eBay site?" below. |
 
 ## Architecture
 
@@ -95,12 +96,15 @@ real `ebay.com` while building this project (headed Playwright, real network):
 that the pytest suite exercises against the mock:
 
 ```bash
-HEADLESS=false SLOW_MO_MS=250 PYTHONPATH=. python scripts/live_ebay_search_smoke.py shoes 30 5
+HEADLESS=false SLOW_MO_MS=250 PYTHONPATH=. python scripts/live_ebay_search_smoke.py shoes 300 5
 ```
 
 This opens real ebay.com, searches "shoes", applies the real price filter, paginates with the
 real "Next" control, and prints up to 5 real listing URLs — no mock involved. It is deliberately
-a standalone script, not a pytest test: see the CI/headless constraint above.
+a standalone script, not a pytest test: see the CI/headless constraint above. Captured output from
+a real run is saved at [`reports/live_ebay_proof.txt`](reports/live_ebay_proof.txt) (5 real
+listing URLs, `maxPrice=300` in whatever currency this run's IP resolved to — see "Currency"
+below).
 
 **What's intentionally *not* run against the live site: `addItemsToCart`.** Beyond the technical
 CI constraint, this is a judgment call: real "Add to cart" clicks on a production marketplace

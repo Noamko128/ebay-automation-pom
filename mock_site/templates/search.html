@@ -10,12 +10,24 @@
      Max field (see pom/search_results_page.py for why placeholder text, not id, is the locator). -->
 <fieldset class="price-filter">
   <legend>Price</legend>
-  <form method="get" action="{{ url_for('search_results') }}">
+  <form method="get" action="{{ url_for('search_results') }}" id="price-filter-form">
     <input type="hidden" name="_nkw" value="{{ query }}">
     <input type="number" name="_udlo" placeholder="Min $" value="{{ price_low }}">
     <input type="number" name="_udhi" placeholder="Max $" value="{{ price_high }}">
   </form>
 </fieldset>
+<script>
+  // Two visible number inputs and no submit button make Enter's native implicit-submission
+  // ambiguous (browsers only auto-submit when there's a single unambiguous default field), so
+  // it silently does nothing. Real ebay.com's price filter has its own JS handling Enter for
+  // exactly this reason; mirror that here instead of relying on native form semantics.
+  document.getElementById("price-filter-form").addEventListener("keydown", (event) => {
+    if (event.key === "Enter") {
+      event.preventDefault();
+      event.target.form.requestSubmit();
+    }
+  });
+</script>
 
 <h2>{{ items|length }} results for "{{ query }}" (page {{ page }})</h2>
 

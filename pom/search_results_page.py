@@ -50,8 +50,13 @@ class SearchResultsPage(BasePage):
             return self
         max_input = self.page.get_by_placeholder(_MAX_PRICE_PLACEHOLDER).first
         max_input.fill(str(max_price))
-        max_input.press("Enter")
-        self.page.wait_for_load_state("load")
+        # expect_navigation() must wrap the action that triggers it: starting the wait only
+        # *after* press("Enter") races the real ebay.com reload (observed ~2.5s after the
+        # keypress) against wait_for_load_state("load"), which resolves instantly against the
+        # already-settled *current* page instead of the upcoming one - leaving get_item_rows()
+        # to read a stale or half-transitioned page.
+        with self.page.expect_navigation():
+            max_input.press("Enter")
         self.log.info("Applied max price filter: %.2f", max_price)
         return self
 
@@ -73,6 +78,6 @@ class SearchResultsPage(BasePage):
         return self.page.locator(NEXT_PAGE_LINK).count() > 0
 
     def go_to_next_page(self) -> "SearchResultsPage":
-        self.page.locator(NEXT_PAGE_LINK).first.click()
-        self.page.wait_for_load_state("load")
+        with self.page.expect_navigation():
+            self.page.locator(NEXT_PAGE_LINK).first.click()
         return self

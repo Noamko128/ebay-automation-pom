@@ -10,7 +10,7 @@ analytics, independent of whether it's technically possible.
 
 Usage (run headed so you can watch it):
 
-    HEADLESS=false SLOW_MO_MS=250 python scripts/live_ebay_search_smoke.py shoes 30 5
+    HEADLESS=false SLOW_MO_MS=250 python scripts/live_ebay_search_smoke.py shoes 300 5
 """
 from __future__ import annotations
 
