@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% block title %}{{ item.title }}{% endblock %}
+{% block content %}
+{% if added %}
+<p class="banner-success" id="add-to-cart-confirmation">Added to cart</p>
+{% endif %}
+
+<h1 class="item-title">{{ item.title }}</h1>
+<p class="item-price">{{ item.price_text }}</p>
+
+<form method="post" action="{{ url_for('add_to_cart', item_id=item.id) }}">
+  {% for variant, options in item.variants.items() %}
+  <div class="variant-group">
+    <label for="variant-{{ variant|lower|replace(' ', '-') }}">{{ variant }}</label>
+    <select name="{{ variant }}" id="variant-{{ variant|lower|replace(' ', '-') }}">
+      {% for option in options %}
+      <option value="{{ option }}">{{ option }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  {% endfor %}
+  <button type="submit" id="add-to-cart-btn">Add to cart</button>
+</form>
+
+<p><a href="{{ url_for('home') }}" id="back-to-home-link">Back to home</a></p>
+{% endblock %}

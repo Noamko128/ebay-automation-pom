@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+{% block title %}Your cart{% endblock %}
+{% block content %}
+<h1>Shopping Cart</h1>
+
+{% if not cart %}
+<p id="empty-cart-message">Your cart is empty.</p>
+{% else %}
+<div id="cart-lines">
+  {% for line in cart %}
+  <div class="cart-line" data-item-id="{{ line.id }}">
+    <span class="cart-line__title">{{ line.title }}</span>
+    <span class="cart-line__variants">({{ line.selections.values()|join(', ') }})</span>
+    <span class="cart-line__price">${{ '%.2f'|format(line.price) }}</span>
+  </div>
+  {% endfor %}
+</div>
+<p class="cart-subtotal" id="cart-subtotal">Subtotal ({{ cart|length }} items): ${{ '%.2f'|format(subtotal) }}</p>
+{% endif %}
+{% endblock %}

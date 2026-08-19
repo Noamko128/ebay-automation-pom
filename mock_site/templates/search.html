@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% block title %}{{ query }} - Search results{% endblock %}
+{% block content %}
+<form method="get" action="{{ url_for('search_results') }}">
+  <input type="text" name="_nkw" id="search-input" value="{{ query }}" size="40">
+  <button type="submit" id="search-submit-btn">Search</button>
+</form>
+
+<fieldset class="price-filter">
+  <legend>Price</legend>
+  <form method="get" action="{{ url_for('search_results') }}">
+    <input type="hidden" name="_nkw" value="{{ query }}">
+    <input type="number" name="_udlo" id="price-min-input" placeholder="Min" value="{{ price_low }}">
+    <input type="number" name="_udhi" id="price-max-input" placeholder="Max" value="{{ price_high }}">
+    <button type="submit" id="price-filter-submit-btn">Go</button>
+  </form>
+</fieldset>
+
+<h2>{{ items|length }} results for "{{ query }}" (page {{ page }})</h2>
+
+<ul class="srp-results" style="list-style:none;padding:0;">
+  {% for item in items %}
+  <li class="s-item" data-item-id="{{ item.id }}">
+    <a class="s-item__link" href="{{ url_for('item_detail', item_id=item.id) }}">
+      <span class="s-item__title">{{ item.title }}</span>
+    </a>
+    <span class="s-item__price">{{ item.price_text }}</span>
+  </li>
+  {% endfor %}
+</ul>
+
+<nav class="pagination">
+  {% if has_next %}
+  <a class="pagination__next" aria-label="Next page"
+     href="{{ url_for('search_results', _nkw=query, _udlo=price_low, _udhi=price_high, _pgn=page+1) }}">Next</a>
+  {% endif %}
+</nav>
+{% endblock %}

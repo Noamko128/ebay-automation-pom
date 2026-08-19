@@ -216,3 +216,13 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Project: test artifacts
+reports/allure-results/
+reports/allure-report/
+reports/traces/
+screenshots/
+test-results/
+playwright-report/
+.env
+

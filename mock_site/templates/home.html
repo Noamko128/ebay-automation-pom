@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+{% block title %}Mock eBay - Home{% endblock %}
+{% block content %}
+<h1>Mock eBay</h1>
+
+{% if not guest %}
+<form method="post" action="{{ url_for('continue_as_guest') }}">
+  <button id="continue-as-guest-btn" type="submit">Continue as Guest</button>
+</form>
+{% else %}
+<p class="banner-success" id="guest-banner">Continuing as Guest</p>
+{% endif %}
+
+<form method="get" action="{{ url_for('search_results') }}">
+  <input type="text" name="_nkw" id="search-input" placeholder="Search for anything" size="40" required>
+  <button type="submit" id="search-submit-btn">Search</button>
+</form>
+{% endblock %}

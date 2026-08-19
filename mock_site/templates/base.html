@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>{% block title %}Mock eBay{% endblock %}</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 0; color: #333; }
+    header { background: #0654ba; color: white; padding: 12px 20px; display: flex; justify-content: space-between; align-items: center; }
+    header a { color: white; text-decoration: none; font-weight: bold; }
+    main { padding: 20px; max-width: 960px; margin: 0 auto; }
+    .s-item { border: 1px solid #ddd; padding: 12px; margin-bottom: 10px; border-radius: 4px; }
+    .s-item__title { font-weight: bold; }
+    .s-item__price { color: #0654ba; font-weight: bold; margin-left: 10px; }
+    .price-filter input { width: 80px; margin-right: 6px; }
+    .pagination { margin-top: 16px; }
+    .variant-group { margin-bottom: 12px; }
+    .cart-line { border-bottom: 1px solid #eee; padding: 8px 0; }
+    .cart-subtotal { font-size: 1.2em; font-weight: bold; margin-top: 16px; }
+    .banner-success { background: #e6f4ea; color: #1e7e34; padding: 8px 12px; border-radius: 4px; margin-bottom: 12px; }
+    button, input[type=submit] { cursor: pointer; }
+  </style>
+</head>
+<body>
+<header>
+  <a href="{{ url_for('home') }}">Mock eBay</a>
+  <a href="{{ url_for('cart_view') }}" id="cart-link">Cart ({{ cart_count }})</a>
+</header>
+<main>
+  {% block content %}{% endblock %}
+</main>
+</body>
+</html>
