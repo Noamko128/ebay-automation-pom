@@ -2,17 +2,18 @@
 {% block title %}{{ query }} - Search results{% endblock %}
 {% block content %}
 <form method="get" action="{{ url_for('search_results') }}">
-  <input type="text" name="_nkw" id="search-input" value="{{ query }}" size="40">
-  <button type="submit" id="search-submit-btn">Search</button>
+  <input type="text" name="_nkw" value="{{ query }}" placeholder="Search for anything" size="40">
+  <button type="submit">Search</button>
 </form>
 
+<!-- Mirrors real ebay.com's price-range filter: no separate "Apply" button, just Enter in the
+     Max field (see pom/search_results_page.py for why placeholder text, not id, is the locator). -->
 <fieldset class="price-filter">
   <legend>Price</legend>
   <form method="get" action="{{ url_for('search_results') }}">
     <input type="hidden" name="_nkw" value="{{ query }}">
-    <input type="number" name="_udlo" id="price-min-input" placeholder="Min" value="{{ price_low }}">
-    <input type="number" name="_udhi" id="price-max-input" placeholder="Max" value="{{ price_high }}">
-    <button type="submit" id="price-filter-submit-btn">Go</button>
+    <input type="number" name="_udlo" placeholder="Min $" value="{{ price_low }}">
+    <input type="number" name="_udhi" placeholder="Max $" value="{{ price_high }}">
   </form>
 </fieldset>
 
@@ -20,18 +21,18 @@
 
 <ul class="srp-results" style="list-style:none;padding:0;">
   {% for item in items %}
-  <li class="s-item" data-item-id="{{ item.id }}">
-    <a class="s-item__link" href="{{ url_for('item_detail', item_id=item.id) }}">
-      <span class="s-item__title">{{ item.title }}</span>
+  <li class="s-card" data-item-id="{{ item.id }}">
+    <a class="s-card__link" href="{{ url_for('item_detail', item_id=item.id) }}">
+      <span class="s-card__title">{{ item.title }}</span>
     </a>
-    <span class="s-item__price">{{ item.price_text }}</span>
+    <span class="s-card__price">{{ item.price_text }}</span>
   </li>
   {% endfor %}
 </ul>
 
 <nav class="pagination">
   {% if has_next %}
-  <a class="pagination__next" aria-label="Next page"
+  <a class="pagination__next" aria-label="Go to next search page"
      href="{{ url_for('search_results', _nkw=query, _udlo=price_low, _udhi=price_high, _pgn=page+1) }}">Next</a>
   {% endif %}
 </nav>
