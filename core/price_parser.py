@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import re
 
-_NUMBER_RE = re.compile(r"(\d{1,3}(?:,\d{3})*(?:\.\d{1,2})?)")
+_NUMBER_RE = re.compile(r"(\d+(?:,\d{3})*(?:\.\d{1,2})?)")
 
 
 def parse_price(text: str | None) -> float | None:
