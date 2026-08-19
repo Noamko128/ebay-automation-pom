@@ -67,7 +67,7 @@ def load_config(profile: str | None = None) -> EnvConfig:
         browser=BrowserConfig(
             name=os.getenv("BROWSER", browser_cfg["name"]),
             headless=os.getenv("HEADLESS", str(browser_cfg["headless"])).lower() == "true",
-            slow_mo_ms=int(browser_cfg["slow_mo_ms"]),
+            slow_mo_ms=int(os.getenv("SLOW_MO_MS", browser_cfg["slow_mo_ms"])),
             viewport_width=int(browser_cfg["viewport"]["width"]),
             viewport_height=int(browser_cfg["viewport"]["height"]),
         ),
