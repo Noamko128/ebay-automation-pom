@@ -1,207 +1,223 @@
 # AI Bug-Hunting Exercise
 
-> **Note on scope**: the assignment brief didn't include the actual snippet the teammate
-> brought in for review — only the exercise description. The code below is a representative
-> AI-generated Playwright/Python script for *this exact* flow (search → filter by price → add
-> to cart → verify total), reconstructed to be the kind of code an LLM commonly produces for
-> this task, so the review below is grounded in a real, runnable example rather than a
-> hypothetical. If the real snippet turns up, the same review process applies directly to it —
-> happy to redo this against the actual file.
-
 ## The code under review
 
 ```python
-cart_items = []
+from playwright.sync_api import sync_playwright
+from selenium import webdriver
+import time
 
-def search_and_filter(page, query, max_price):
-    page.goto(f"https://example-shop.com/search?q={query}")
-    page.click("#search-btn")
+def test_search_functionality():
+    browser = sync_playwright().start().chromium.launch()
+    page = browser.new_page()
+    page.goto("https://example.com")
+
+    time.sleep(2)
+
+    search_box = page.locator("#search")
+    search_box.fill("playwright testing")
+
+    page.locator(".button").click()
+
     time.sleep(3)
 
-    results = page.query_selector_all(".item")
-    matches = []
-    for i in range(len(results) + 1):
-        price_text = results[i].query_selector(".price").inner_text()
-        price = float(price_text.replace("$", ""))
-        if price <= max_price:
-            matches.append(results[i])
-    return matches[:5]
+    results = page.locator(".result-item")
 
-
-def add_to_cart(page, items):
-    for item in items:
-        try:
-            item.click()
-            size_dropdown = page.query_selector("#size")
-            size_dropdown.select_option(index=0)
-            page.click("#add-to-cart")
-        except:
-            pass
-        cart_items.append(item)
-
-
-def verify_total(page, budget_per_item, count):
-    total_text = page.query_selector("#subtotal").inner_text()
-    total = float(total_text.replace("$", ""))
-    assert total == budget_per_item * count
+    browser.close()
 ```
 
 ## Bugs found
 
-### 1. Off-by-one loop bound → `IndexError` on every run (`search_and_filter`, line 9)
+### 1. No assertions anywhere — this test cannot fail (line 20)
 
 ```python
-for i in range(len(results) + 1):
-    price_text = results[i].query_selector(".price").inner_text()
+results = page.locator(".result-item")
+
+browser.close()
 ```
 
-`range(len(results) + 1)` yields indices `0..len(results)` inclusive — one past the end of the
-list. `results[len(results)]` always raises `IndexError`, so this function cannot finish
-successfully even once; if the results list happens to be non-empty at all, the loop crashes on
-its last iteration. This is the single most obvious reason "it doesn't work as expected."
+`page.locator(...)` just builds a `Locator` object; it doesn't query the page or check anything.
+Nothing here ever calls `.count()`, reads `.inner_text()`, or hits an `expect(...)` assertion.
+Whether the search actually worked, returned results, or crashed the page entirely, this
+function runs to completion and the test reports green. This is the single most serious bug:
+a test that validates nothing is worse than no test, because it actively hides regressions
+behind a passing badge — exactly the kind of thing that made the teammate say "it doesn't work
+as I expected" with no error to go on.
 
-**Fix**: iterate the elements directly, don't index by a manually-computed range at all.
+**Fix**: assert on something observable, ideally with Playwright's own auto-retrying
+assertions rather than a one-shot count check:
 
 ```python
-for result in results:
-    price_text = result.query_selector(".price").inner_text()
+from playwright.sync_api import expect
+
+results = page.locator(".result-item")
+expect(results.first).to_be_visible()
+assert results.count() > 0, "Expected at least one search result"
 ```
 
-### 2. Naive price parsing breaks on anything but the simplest price text (`search_and_filter`, line 11)
+### 2. Selenium imported into a Playwright script, and never used (line 2)
 
 ```python
-price = float(price_text.replace("$", ""))
+from selenium import webdriver
 ```
 
-Real listing prices are rarely just `"$19.99"`. Common variants that this line cannot handle:
-- Thousands separators: `"$1,299.00"` → `float("1,299.00")` raises `ValueError`.
-- Price ranges (an item with multiple variants at different prices): `"$19.99 to $29.99"` →
-  `float("19.99 to 29.99")` raises `ValueError`.
-- Any surrounding text, e.g. `"$19.99/ea"` or `"Was $25 Now $19.99"`.
+This import does nothing for this test — `webdriver` is never referenced anywhere in the
+function — and it mixes two unrelated automation frameworks in one file. This is a classic
+tell for AI-generated code: the model has seen thousands of Selenium examples and thousands of
+Playwright examples for "search box test" and blended boilerplate from both without noticing
+they don't belong together. Left in, it's a dead import at best; at worst it means `selenium`
+has to be installed as a dependency for a codebase that doesn't actually use it, and it
+confuses the next reader into thinking Selenium is involved in this flow.
 
-Any of these crashes the whole search on the first non-trivial listing it meets — and because
-there's no `try`/`except` around it, one oddly-formatted price on the page takes down the entire
-function.
+**Fix**: delete the line. (And if this recurs across a codebase, it's worth grepping for
+`import selenium` in a nominally-Playwright project as a quick sanity check.)
 
-**Fix**: extract the number(s) with a regex, strip separators, and decide what a "price" means
-for a range (this project's `core/price_parser.py` takes the range's lower bound, since that's
-the value being compared against a `maxPrice` ceiling):
+### 3. The `Playwright` driver object is started but never stopped (line 6)
 
 ```python
-import re
-
-def parse_price(text: str) -> float | None:
-    matches = re.findall(r"(\d{1,3}(?:,\d{3})*(?:\.\d{1,2})?)", text)
-    if not matches:
-        return None
-    return min(float(m.replace(",", "")) for m in matches)
+browser = sync_playwright().start().chromium.launch()
 ```
 
-### 3. Bare `except: pass` hides every failure, including the ones you actually care about (`add_to_cart`, lines 21–23)
+`sync_playwright().start()` returns a `Playwright` driver instance, which owns a background
+driver process/connection. Chaining `.chromium.launch()` off it immediately and discarding the
+reference means there is no handle left to call `.stop()` on later — the driver process is
+leaked for the lifetime of the Python process. `browser.close()` at the end only closes the
+*browser*, not the driver that launched it. Run this in a long-lived test session or a loop and
+the leaked driver processes accumulate.
+
+**Fix**: use the `with sync_playwright() as p:` context manager, which guarantees `stop()` runs
+even if something in the middle raises:
 
 ```python
-try:
-    item.click()
-    size_dropdown = page.query_selector("#size")
-    size_dropdown.select_option(index=0)
-    page.click("#add-to-cart")
-except:
-    pass
-cart_items.append(item)
+with sync_playwright() as p:
+    browser = p.chromium.launch()
+    ...
 ```
 
-This swallows *every* exception — a missing `#size` element (`select_option` on `None` raising
-`AttributeError`), a detached/stale element after navigation, a real "Add to cart" failure due
-to an out-of-stock item, a timeout, anything. Worse, `cart_items.append(item)` runs
-unconditionally after the `except`, regardless of whether the add actually succeeded — so the
-test's own bookkeeping claims an item was added to the cart when it may not have been. This is
-the kind of bug that makes a suite report green while the feature is broken: exactly what the
-teammate described ("doesn't work as I expected" with no useful error to go on).
-
-**Fix**: catch only the exceptions you can meaningfully handle, log/re-raise the rest, and only
-record success after the site itself confirms it (e.g. waiting for a confirmation element,
-matching this project's `ItemPage.add_to_cart`, which waits for `#add-to-cart-confirmation`
-rather than assuming the click worked):
+### 4. No explicit `BrowserContext`, and nothing is ever closed in the right order (line 7)
 
 ```python
-item.click()
-size_dropdown = page.query_selector("#size")
-if size_dropdown is not None:
-    size_dropdown.select_option(index=0)
-page.click("#add-to-cart")
-page.wait_for_selector("#add-to-cart-confirmation")
-cart_items.append(item)
+page = browser.new_page()
 ```
 
-### 4. Hardcoded `time.sleep(3)` instead of an explicit wait (`search_and_filter`, line 6)
+Calling `new_page()` directly on `browser` creates an *implicit* default context behind the
+scenes, with no way to configure it (viewport, locale, tracing, storage state, etc.) and no
+explicit reference to close it. `browser.close()` at the end will tear down that implicit
+context along with it, but if this function is extended later (e.g. to open a second page, or
+to run assertions after an exception), there's no `context` variable to reason about or clean up
+independently of the browser. This also matters for isolation: an explicit context is what lets
+each test get its own cookies/storage without leaking into the next one — see this project's own
+`tests/conftest.py`, where a fresh `BrowserContext` is created per test for exactly that reason.
+
+**Fix**: create the context explicitly and close it before closing the browser:
 
 ```python
-page.click("#search-btn")
+context = browser.new_context()
+page = context.new_page()
+...
+context.close()
+browser.close()
+```
+
+### 5. Hardcoded `time.sleep()` instead of waiting on real page state (lines 9 and 16)
+
+```python
+time.sleep(2)
+...
 time.sleep(3)
 ```
 
-This is both slow (always burns 3 seconds even when the page is ready in 300ms) and unreliable
-(if the results ever take longer than 3 seconds — slow network, larger result set — the next
-line reads a page that hasn't finished loading yet, and `query_selector_all(".item")` silently
-returns an empty or partial list rather than failing loudly). Sleep-based waits are a classic
-source of flaky tests that pass locally and fail in CI, or vice versa.
+Both sleeps are guesses about how long the page needs. They're slow when the page is actually
+ready sooner (every run pays the full 2+3 seconds regardless), and still flaky when it's slower
+than guessed (a loaded CI machine, a slow network) — the next line proceeds against a page that
+isn't ready yet, with no error explaining why. Playwright already auto-waits for elements to be
+actionable before interacting with them, so most of these sleeps aren't even necessary; where an
+explicit wait genuinely is needed, it should be tied to a real condition, not a clock.
 
-**Fix**: wait for a condition tied to actual page state:
+**Fix**: remove the sleeps and, only where actually needed, wait on the specific thing that
+matters:
 
 ```python
-page.click("#search-btn")
-page.wait_for_load_state("load")
-# or, more precisely: page.wait_for_selector(".item")
+page.goto("https://example.com")
+search_box = page.locator("#search")
+search_box.fill("playwright testing")
+page.locator(".button").click()
+page.wait_for_load_state("load")  # or wait_for_selector(...) on a specific result element
 ```
 
-### 5. Module-level mutable list as cart state → test pollution across runs (`cart_items = []`, line 1; `add_to_cart`, line 24)
+### 6. Overly generic locator likely to match the wrong element (line 14)
 
 ```python
-cart_items = []
+page.locator(".button").click()
+```
+
+`.button` is a generic, presentational class name — the kind of thing many unrelated elements
+on a real page share (a "Search" button, a cookie-consent banner's button, a "Sign in" button,
+etc.). In Playwright's default (non-strict-mode-tolerant) usage this either clicks whichever
+element happens to match first, silently, or raises a strict-mode error if there's more than
+one — either way, it isn't reliably clicking "the search submit button" on purpose. This is the
+same category of mistake this project's own `pom/home_page.py` had to explicitly guard against
+(`get_by_role("button", name="Search", exact=True)`, chosen specifically because a plain
+`name="Search"` locator on real ebay.com ambiguously also matched a "Clear search" button).
+
+**Fix**: locate by role/accessible name, or another attribute that's actually unique to this
+control, not a shared styling class:
+
+```python
+page.get_by_role("button", name="Search").click()
+```
+
+### 7. No `try`/`finally` around browser teardown (whole function)
+
+```python
+browser = sync_playwright().start().chromium.launch()
+page = browser.new_page()
+page.goto("https://example.com")
 ...
-cart_items.append(item)
+browser.close()
 ```
 
-`cart_items` is a single list shared by every call to `add_to_cart` for the lifetime of the
-Python process. If these functions are used across more than one test (e.g. pytest collecting
-multiple test functions or parametrized cases in one session), the second test starts with
-whatever the first test already appended — item counts, and therefore any total/budget
-assertion derived from `len(cart_items)`, silently include leftover state from a previous,
-unrelated test. This is a particularly nasty bug because each test can pass in isolation
-(`pytest -k test_name`) yet fail only when run as part of the full suite, or worse, drift wrong
-in the opposite direction and falsely pass.
+`browser.close()` is the last line of the function. If `page.goto(...)`, the `fill(...)`, the
+`click(...)`, or the (missing) assertion raises for any reason, the function exits via the
+exception and `browser.close()` never runs. Combined with bug #3, this compounds into a real
+resource leak on every single failure — precisely the runs where you'd want teardown to still
+happen so the next test isn't fighting a leftover browser process for resources.
 
-**Fix**: don't use module/global state for anything that represents one test's data. Return
-values instead, or scope state to a fixture with function scope (as this project does — each
-test gets its own Playwright `BrowserContext`/cookie session, so the *actual* cart on the site
-is naturally reset per test too, not just a local bookkeeping list):
+**Fix**: guarantee cleanup with `finally` (or, better, let a context manager / pytest fixture
+own the lifecycle entirely, as in `tests/conftest.py`'s `browser`/`context`/`page` fixtures,
+which yield inside a `try`/`finally`-equivalent generator so teardown always runs):
 
 ```python
-def add_to_cart(page, items) -> list:
-    added = []
-    for item in items:
-        ...
-        added.append(item)
-    return added
+browser = p.chromium.launch()
+try:
+    context = browser.new_context()
+    page = context.new_page()
+    ...
+finally:
+    browser.close()
 ```
 
-### 6. Exact equality on a monetary total instead of the budget ceiling the spec asks for (`verify_total`, line 32)
+## Corrected version, all fixes combined
 
 ```python
-assert total == budget_per_item * count
-```
+from playwright.sync_api import sync_playwright, expect
 
-Two separate problems here:
-- **Wrong comparison**: the spec (`assertCartTotalNotExceeds`) asks whether the total is at or
-  under a ceiling, not whether it matches it exactly. Any cart whose true total is *less* than
-  the budget (the actual point of the check) fails this assertion, even though nothing is wrong.
-- **Float equality**: even if `==` were the right operator, comparing floats for exact equality
-  is unreliable — summing prices like `19.99 + 29.99 + 45.50` can land on
-  `95.47999999999999` due to binary floating-point representation, so an exact match can fail
-  purely from arithmetic, not from an actual bug in the app.
+def test_search_functionality():
+    with sync_playwright() as p:
+        browser = p.chromium.launch()
+        try:
+            context = browser.new_context()
+            page = context.new_page()
+            page.goto("https://example.com")
 
-**Fix**: use the inequality the spec actually describes:
+            page.locator("#search").fill("playwright testing")
+            page.get_by_role("button", name="Search").click()
 
-```python
-assert total <= budget_per_item * count
+            results = page.locator(".result-item")
+            expect(results.first).to_be_visible()
+            assert results.count() > 0, "Expected at least one search result"
+
+            context.close()
+        finally:
+            browser.close()
 ```

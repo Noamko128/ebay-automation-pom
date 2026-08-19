@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import shutil
 import subprocess
 import sys
 import time
@@ -29,8 +30,23 @@ def _wait_for_server(base_url: str, timeout_s: float = 10.0) -> None:
 
 @pytest.fixture(scope="session")
 def config() -> EnvConfig:
+    """Resolves the active profile and resets this session's artifact directories.
+
+    Mirrors pytest.ini's --clean-alluredir: without this, a run that produces fewer
+    screenshots/traces than a previous one (e.g. a test failing partway through) leaves stale
+    files mixed in, misrepresenting what the latest run actually did.
+    """
     cfg = load_config()
+
+    if cfg.screenshots_dir.exists():
+        shutil.rmtree(cfg.screenshots_dir)
     cfg.screenshots_dir.mkdir(parents=True, exist_ok=True)
+
+    traces_dir = PROJECT_ROOT / "reports" / "traces"
+    if traces_dir.exists():
+        shutil.rmtree(traces_dir)
+    traces_dir.mkdir(parents=True, exist_ok=True)
+
     return cfg
 
 
@@ -80,7 +96,6 @@ def context(browser, config: EnvConfig, request):
     yield ctx
 
     traces_dir = PROJECT_ROOT / "reports" / "traces"
-    traces_dir.mkdir(parents=True, exist_ok=True)
     trace_path = traces_dir / f"{request.node.name}.zip"
     ctx.tracing.stop(path=str(trace_path))
     if trace_path.exists():
